@@ -26,6 +26,18 @@ npm start
 npm run dev
 ```
 
+### Testing
+```bash
+# Run all tests
+npm test
+
+# Run tests in watch mode (for development)
+npm run test:watch
+
+# Run tests with coverage report
+npm run test:coverage
+```
+
 The compiled JavaScript output goes to the `build/` directory.
 
 ## Architecture
@@ -84,6 +96,19 @@ The compiled JavaScript output goes to the `build/` directory.
 
 ## File Structure
 
-- `src/index.ts`: Single-file implementation containing the entire MCP server
+- `src/index.ts`: Entry point that starts the MCP server
+- `src/ssh-mcp-server.ts`: Main SSH MCP server implementation
+- `tests/`: Jest unit tests for the server functionality
 - `build/`: TypeScript compilation output
 - `package.json`: Defines the CLI binary as `ssh-mcp-server`
+
+## Testing
+
+The project includes comprehensive Jest unit tests covering:
+- Connection management (connect, disconnect, status)
+- Command execution with various scenarios
+- Error handling and validation
+- Authentication methods (password and private key)
+- Tool schema validation
+
+Tests use mocked SSH connections to avoid requiring actual SSH servers during testing.
