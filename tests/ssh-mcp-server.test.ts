@@ -640,5 +640,145 @@ describe('SSH MCP Server - Public API Tests', () => {
         },
       })).rejects.toThrow('Failed to execute command: Command execution failed');
     });
+
+    test('should handle generic error in tool execution', async () => {
+      // Force a non-McpError to be thrown
+      const originalConnect = mockSshClientInstance.connect;
+      mockSshClientInstance.connect = undefined; // This will cause a runtime error
+
+      await expect(callToolHandler({
+        method: 'tools/call',
+        params: {
+          name: 'ssh_connect',
+          arguments: {
+            host: 'test-host',
+            username: 'test-user',
+            password: 'test-password',
+          },
+        },
+      })).rejects.toThrow('Tool execution failed:');
+
+      // Restore for cleanup
+      mockSshClientInstance.connect = originalConnect;
+    });
+  });
+
+  describe('SSH Connection End Event', () => {
+    test('should clean up connection state on end event', async () => {
+      let endCallback: Function | undefined;
+
+      // Mock successful connection with end event capture
+      mockSshClientInstance.on.mockImplementation((event: string, callback: Function) => {
+        if (event === 'ready') {
+          process.nextTick(() => callback());
+        } else if (event === 'end') {
+          endCallback = callback;
+        }
+        return mockSshClientInstance;
+      });
+
+      // Connect first
+      await callToolHandler({
+        method: 'tools/call',
+        params: {
+          name: 'ssh_connect',
+          arguments: {
+            host: 'test-host',
+            username: 'test-user',
+            password: 'test-password',
+          },
+        },
+      });
+
+      // Verify connection is established
+      const statusAfterConnect = await callToolHandler({
+        method: 'tools/call',
+        params: {
+          name: 'ssh_status',
+          arguments: {},
+        },
+      });
+      expect(JSON.parse(statusAfterConnect.content[0].text).connected).toBe(true);
+
+      // Simulate connection end
+      if (endCallback) {
+        endCallback();
+      }
+
+      // Verify connection state is cleaned up
+      const statusAfterEnd = await callToolHandler({
+        method: 'tools/call',
+        params: {
+          name: 'ssh_status',
+          arguments: {},
+        },
+      });
+      expect(JSON.parse(statusAfterEnd.content[0].text).connected).toBe(false);
+    });
+  });
+
+  describe('SSH Command with stderr Output', () => {
+    test('should capture stderr output from commands', async () => {
+      // Mock successful connection
+      mockSshClientInstance.on.mockImplementation((event: string, callback: Function) => {
+        if (event === 'ready') {
+          process.nextTick(() => callback());
+        }
+        return mockSshClientInstance;
+      });
+
+      // Connect first
+      await callToolHandler({
+        method: 'tools/call',
+        params: {
+          name: 'ssh_connect',
+          arguments: {
+            host: 'test-host',
+            username: 'test-user',
+            password: 'test-password',
+          },
+        },
+      });
+
+      // Mock command execution with stderr
+      const mockStream = {
+        on: jest.fn(),
+        stderr: { on: jest.fn() },
+      };
+
+      mockSshClientInstance.exec.mockImplementation((command: string, callback: Function) => {
+        process.nextTick(() => {
+          callback(null, mockStream);
+          
+          // Simulate stderr and close events
+          setTimeout(() => {
+            const stderrCallback = mockStream.stderr.on.mock.calls.find((call: any) => call[0] === 'data')?.[1];
+            if (stderrCallback && typeof stderrCallback === 'function') {
+              stderrCallback(Buffer.from('error message\n'));
+            }
+            
+            const closeCallback = mockStream.on.mock.calls.find((call: any) => call[0] === 'close')?.[1];
+            if (closeCallback && typeof closeCallback === 'function') {
+              closeCallback(1); // Non-zero exit code
+            }
+          }, 10);
+        });
+      });
+
+      const response = await callToolHandler({
+        method: 'tools/call',
+        params: {
+          name: 'ssh_exec',
+          arguments: {
+            command: 'failing-command',
+          },
+        },
+      });
+
+      const responseData = JSON.parse(response.content[0].text);
+      expect(responseData.stderr).toBe('error message\n');
+      expect(responseData.exitCode).toBe(1);
+      expect(responseData.success).toBe(false);
+    });
   });
 });
