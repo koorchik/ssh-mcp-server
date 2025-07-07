@@ -2,6 +2,7 @@
   "name": "ssh-mcp-server",
   "version": "0.1.0",
   "description": "MCP server for executing commands via SSH",
+  "license": "MIT",
   "main": "build/index.js",
   "type": "module",
   "scripts": {
