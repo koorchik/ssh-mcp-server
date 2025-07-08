@@ -341,6 +341,13 @@ export class SSHMCPServer {
 
       let finalCommand = command;
       if (workingDirectory) {
+        const validPathRegex = /^[a-zA-Z0-9\/\._-]+$/;
+        if (!validPathRegex.test(workingDirectory)) {
+          throw new McpError(
+            ErrorCode.InvalidRequest,
+            'Invalid working directory format'
+          );
+        }
         finalCommand = `cd "${workingDirectory}" && ${command}`;
       }
 
